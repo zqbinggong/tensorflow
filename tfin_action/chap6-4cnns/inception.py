@@ -57,7 +57,7 @@ def inception_v3_arg_scope(weight_decay=0.00004, stddev=0.1, batch_norm_var_coll
     with slim.arg_scope([slim.conv2d, slim.fully_connected], weights_regularizer=slim.l2_regularizer(weight_decay)):
         with slim.arg_scope([slim.conv2d], weights_initializer=tf.truncated_normal_initializer(stddev=stddev),
                             activation_fn=tf.nn.relu,
-                            normalizer_fn=slim.batch_norml,
+                            normalizer_fn=slim.batch_norm,
                             normalizer_params=batch_norm_params) as sc:
             return sc
 
@@ -302,14 +302,14 @@ def inception_v3(inputs, num_classes=1000, is_training=True, dropout_keep_prob=0
     :param scope:
     """
     with tf.variable_scope(scope, 'InceptionV3', [inputs, num_classes], reuse=reuse) as scope:
-        with slim.arg_scope([slim.batch_norml, slim.dropout], is_training=is_training):
+        with slim.arg_scope([slim.batch_norm, slim.dropout], is_training=is_training):
             net, end_points = inception_base(inputs, scope)
             with slim.arg_scope([slim.conv2d, slim.max_pool2d, slim.avg_pool2d], stride=1, padding='SAME'):
                 aux_logits = end_points['Mixed_6e']
 
                 # 辅助分类部分，经过卷积池化等操作后，size=1x1x1000
                 with tf.variable_scope('AuxLogits'):
-                    aux_logits = slim.pool2d(aux_logits, [5, 5], stride=3, padding='VALID', scope='AvgPool_1a_5x5')
+                    aux_logits = slim.avg_pool2d(aux_logits, [5, 5], stride=3, padding='VALID', scope='AvgPool_1a_5x5')
                     aux_logits = slim.conv2d(aux_logits, 128, [1, 1], scope='Conv2d_1b_1x1')
                     aux_logits = slim.conv2d(aux_logits, 768, [5, 5], weights_initializer=trunc_normal(0.01),
                                              padding='VALID', scope='Conv2d_2a_5x5')
@@ -337,18 +337,44 @@ def inception_v3(inputs, num_classes=1000, is_training=True, dropout_keep_prob=0
 """
 性能测试
 """
-import AlexNet as ax
+from datetime import datetime
+import time
+import math
+
+
+def time_tensorflow_run(session, target, info_string):
+    num_steps_burn_in = 10
+    total_duration = 0.0
+    total_duration_squared = 0.0
+    for i in range(num_batches + num_steps_burn_in):
+        start_time = time.time()
+        _ = session.run(target)
+        duration = time.time() - start_time
+        if i >= num_steps_burn_in:
+            if not i % 10:
+                print('%s: step %d, duration = %.3f' % (datetime.now(), i - num_steps_burn_in, duration))
+            total_duration += duration
+            total_duration_squared += duration * duration
+    mn = total_duration / num_batches
+    vr = total_duration_squared / mn * mn
+    sd = math.sqrt(vr)
+    print('%s: %s across %d steps, %.3f =/- %.3f sec / batch' % (datetime.now(), info_string, num_batches, mn, sd))
+
 batch_size = 32
 height, width = 299, 299
-inputs = tf.random_uniform(batch_size, height, width, 3)
+inputs = tf.random_uniform([batch_size, height, width, 3])
 with slim.arg_scope(inception_v3_arg_scope()):
-    logits, end_points = inception_v3(inputs, is_training=False)
+    logits, end_points = inception_v3(inputs, is_training=False, reuse=tf.AUTO_REUSE)
 init = tf.global_variables_initializer()
 sess = tf.Session()
 sess.run(init)
 num_batches = 100
-ax.time_tensorflow_run(sess, logits, 'forward')
+time_tensorflow_run(sess, logits, 'forward')
 
 
+"""
+2018-05-22 18:14:35.874307: step 0, duration = 18.064
+2018-05-22 18:17:36.628911: step 10, duration = 18.041
+"""
 
 
