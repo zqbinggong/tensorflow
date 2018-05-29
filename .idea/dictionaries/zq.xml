@@ -3,6 +3,7 @@
     <words>
       <w>cifar</w>
       <w>conv</w>
+      <w>dataset</w>
       <w>logits</w>
       <w>softmax</w>
     </words>
