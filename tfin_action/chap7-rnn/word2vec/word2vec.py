@@ -44,6 +44,7 @@ del words # 删除原始列表以节约内存
 
 data_index = 0
 
+
 def generate_batch(batch_size, num_skips, skip_window):
     """
 
